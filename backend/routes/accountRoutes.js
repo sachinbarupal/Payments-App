@@ -27,21 +27,28 @@ router.post("/transfer", authMiddleware, async (req, res) => {
     session.startTransaction();
 
     const { amount, to } = req.body;
+    const success = /^[0-9]+$/.test(req.body.amount);
 
+    if (!success || amount <= 0) {
+      await session.abortTransaction();
+      return res.status(403).json({ message: "Invalid Amount !!" });
+    }
+
+    console.log(amount);
     const account = await Account.findOne({ userId: req.userId }).session(
       session
     );
 
     if (!account || account.balance < amount) {
       await session.abortTransaction();
-      return res.status(200).json({ message: "Insufficient Balance !!" });
+      return res.status(403).json({ message: "Insufficient Balance !!" });
     }
 
     const toAccount = await Account.findOne({ userId: to }).session(session);
 
     if (!toAccount) {
       await session.abortTransaction();
-      return res.status(200).json({ message: "Invalid Account !!" });
+      return res.status(403).json({ message: "Invalid Account !!" });
     }
 
     await Account.updateOne(

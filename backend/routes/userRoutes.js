@@ -9,20 +9,20 @@ const { Account } = require("../models/Account");
 
 // SIGNUP
 const signupSchema = zod.object({
-  username: zod.string(),
+  email: zod.string().email(),
   password: zod.string(),
   firstName: zod.string(),
   lastName: zod.string(),
 });
 router.post("/signup", async (req, res) => {
   try {
-    const username = req.body.username;
+    const email = req.body.email;
     const password = req.body.password;
     const firstName = req.body.firstName;
     const lastName = req.body.lastName;
 
     const { success } = signupSchema.safeParse({
-      username,
+      email,
       password,
       firstName,
       lastName,
@@ -31,24 +31,23 @@ router.post("/signup", async (req, res) => {
     if (!success)
       return res.status(403).json({ message: "Incorrect Inputs !" });
 
-    const user = await User.findOne({ username });
+    const user = await User.findOne({ email });
 
-    if (user)
-      return res.status(403).json({ message: "username already taken" });
+    if (user) return res.status(403).json({ message: "Email already taken" });
 
     const salt = await bcrypt.genSalt(10);
     const hash = await bcrypt.hash(password, salt);
 
     const { _id: userId } = await User.create({
-      username,
+      email,
       password: hash,
       firstName,
       lastName,
     });
 
     await Account.create({
-      userId: _id,
       balance: 1 + Math.random() * 1000,
+      userId,
     });
 
     const token = jwt.sign({ userId }, process.env.JWT_SECRET);
@@ -64,19 +63,19 @@ router.post("/signup", async (req, res) => {
 
 // SIGNIN
 const signinSchema = zod.object({
-  username: zod.string(),
+  email: zod.string().email(),
   password: zod.string(),
 });
 router.post("/signin", async (req, res) => {
   try {
-    const username = req.body.username;
+    const email = req.body.email;
     const password = req.body.password;
 
-    const { success } = signinSchema.safeParse({ username, password });
+    const { success } = signinSchema.safeParse({ email, password });
     if (!success) return res.status(403).json({ message: "Invalid Inputs !!" });
 
-    const user = await User.findOne({ username });
-    if (!user) return res.status(403).json({ message: "Incorrent Inputs !!" });
+    const user = await User.findOne({ email });
+    if (!user) return res.status(403).json({ message: "User Not Found !!" });
 
     const validate = await bcrypt.compare(password, user.password);
 
@@ -130,15 +129,16 @@ router.get("/search", authMiddleware, async (req, res) => {
       $or: [
         {
           firstName: {
-            $regex: filter,
+            $regex: new RegExp(filter, "i"),
           },
         },
         {
           lastName: {
-            $regex: filter,
+            $regex: new RegExp(filter, "i"),
           },
         },
       ],
+      $and: [{ _id: { $ne: req.userId } }],
     });
 
     res.status(200).json({
